@@ -13,20 +13,18 @@
         .item-checkbox { width: 24px; height: 24px; cursor: pointer; flex-shrink: 0; }
         .item-label { font-size: 1rem; margin-left: 8px; cursor: pointer; flex-grow: 1; word-break: break-all; }
         
-        /* 入力エリア（金額と税率）のグループ */
         .input-group-area { display: none; align-items: center; gap: 4px; margin-left: auto; }
         .input-group-area.active { display: flex; }
-        
-        /* 金額入力欄 */
         .price-input { width: 75px; font-size: 0.95rem; text-align: right; }
-        
-        /* 税率選択ボックス */
         .tax-select { width: 65px; font-size: 0.85rem; padding: 4px; border-radius: 6px; }
 
-        /* ★削除ボタン（×）のスタイル */
         .delete-item-btn { background: none; border: none; color: #dc3545; font-size: 1.2rem; font-weight: bold; padding: 0 6px; margin-left: 6px; cursor: pointer; line-height: 1; }
         .delete-item-btn:hover { color: #bd2130; }
         
+        /* ★ メモ（カード）削除ボタンのスタイル */
+        .delete-note-btn { background: none; border: none; color: #dc3545; font-size: 1.1rem; font-weight: bold; padding: 0 0 0 8px; cursor: pointer; line-height: 1; }
+        .delete-note-btn:hover { color: #bd2130; }
+
         .total-box { background-color: #f1f3f4; border-radius: 8px; padding: 12px; margin-top: 15px; font-size: 0.95rem; }
         .total-val { font-size: 1.3rem; }
     </style>
@@ -58,13 +56,17 @@
                 <div class="card-body d-flex flex-column p-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <h5 class="card-title fw-bold m-0" th:text="${note.title}">メモのタイトル</h5>
-                        <small class="text-muted" th:text="${#temporals.format(note.createdAt, 'MM/dd HH:mm')}">作成日時</small>
+                        
+                        <!-- ★日時の横に、カード丸ごと削除用の「×」ボタンを追加 -->
+                        <div class="d-flex align-items-center">
+                            <small class="text-muted" th:text="${#temporals.format(note.createdAt, 'MM/dd HH:mm')}">作成日時</small>
+                            <button type="button" class="delete-note-btn" th:onclick="'deleteNote(' + ${note.id} + ')'" title="このメモを削除">×</button>
+                        </div>
                     </div>
                     <hr class="my-2">
 
                     <!-- アイテム一覧 -->
                     <div class="flex-grow-1 my-2">
-                        <!-- ★ JavaScriptで消しやすいように各行に id を付与 -->
                         <div th:each="item : ${note.shoppingItems}" class="item-row" th:id="'item-row-' + ${item.id}">
                             <input type="checkbox" th:checked="${item.isInCart}" 
                                    th:id="'item-check-' + ${item.id}"
@@ -74,12 +76,10 @@
                             
                             <!-- 金額と税率の入力エリア -->
                             <div th:id="'input-area-' + ${item.id}" th:class="${item.isInCart} ? 'input-group-area active' : 'input-group-area'">
-                                <!-- 金額入力 -->
                                 <input type="number" th:value="${item.price}" 
                                        th:id="'item-price-' + ${item.id}" class="form-control form-control-sm price-input"
                                        placeholder="¥" inputmode="numeric" th:oninput="'updateItemData(' + ${item.id} + ')'">
                                 
-                                <!-- 税率選択セレクトボックス -->
                                 <select th:id="'item-tax-' + ${item.id}" class="form-select form-select-sm tax-select" th:onchange="'updateItemData(' + ${item.id} + ')'">
                                     <option value="10" th:selected="${item.specificTaxRate == 10}">10%</option>
                                     <option value="8" th:selected="${item.specificTaxRate == 8}">8%</option>
@@ -87,7 +87,6 @@
                                 </select>
                             </div>
 
-                            <!-- ★ アイテムの削除ボタン（×）を追加 -->
                             <button type="button" class="delete-item-btn" th:onclick="'deleteItem(' + ${item.id} + ')'" title="削除">×</button>
                         </div>
                         
@@ -125,6 +124,30 @@
         document.querySelectorAll('.note-card').forEach(card => { calculateCardTotal(card); });
     });
 
+    // ★ メモ（カード）を丸ごと削除するJavaScript関数を追加
+    function deleteNote(noteId) {
+        if (!confirm('この買い物メモを丸ごと削除してもよろしいですか？\n（中のアイテムもすべて消去されます）')) {
+            return;
+        }
+
+        const noteCardCol = document.getElementById(`note-card-${noteId}`);
+
+        const formData = new FormData();
+        formData.append('noteId', noteId);
+
+        fetch('/notes/delete', { method: 'POST', body: formData })
+        .then(response => response.text())
+        .then(data => {
+            if (data === 'success') {
+                // 画面からカードの列ごと綺麗に消去する
+                noteCardCol.remove();
+            } else {
+                alert('メモの削除に失敗しました。');
+            }
+        })
+        .catch(error => console.error('エラー:', error));
+    }
+
     function toggleCart(itemId) {
         const checkbox = document.getElementById(`item-check-${itemId}`);
         const inputArea = document.getElementById(`input-area-${itemId}`);
@@ -154,16 +177,14 @@
         sendDataToServer(itemId, checkbox.checked, priceInput.value, taxSelect.value);
     }
 
-    // ★ アイテムを画面とDBから削除するJavaScript関数を追加
     function deleteItem(itemId) {
         if (!confirm('このアイテムを削除してもよろしいですか？')) {
-            return; // キャンセルされたら何もしない
+            return;
         }
 
         const itemRow = document.getElementById(`item-row-${itemId}`);
         const card = itemRow.closest('.note-card');
 
-        // Java側の削除APIを呼び出す
         const formData = new FormData();
         formData.append('itemId', itemId);
 
@@ -171,13 +192,9 @@
         .then(response => response.text())
         .then(data => {
             if (data === 'success') {
-                // 画面から該当の行を削除
                 itemRow.remove();
-                
-                // アイテムがゼロになったかチェックしてメッセージを出す
                 const remainingItems = card.querySelectorAll('.item-row');
                 if (remainingItems.length === 0) {
-                    // まだ「アイテムはありません」の文字がなければ追加する
                     if (!card.querySelector('.text-no-items')) {
                         const noItemText = document.createElement('p');
                         noItemText.className = 'text-muted text-center small my-4 text-no-items';
@@ -185,8 +202,6 @@
                         card.querySelector('.flex-grow-1').appendChild(noItemText);
                     }
                 }
-                
-                // 金額をリアルタイム再計算
                 calculateCardTotal(card);
             } else {
                 alert('削除に失敗しました。');
