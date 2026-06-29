@@ -55,7 +55,7 @@ public class NoteController {
 //④ カゴ入れ状態、金額、そして【税率】を非同期（裏側）で更新する処理
 @PostMapping("/items/update")
 @ResponseBody
-public String updateItem(
+	public String updateItem(
         @RequestParam("itemId") Long itemId,
         @RequestParam("isInCart") Boolean isInCart,
         @RequestParam(value = "price", required = false) Integer price,
@@ -70,5 +70,16 @@ public String updateItem(
         return "success";
     }
     return "error";
-	}
+  }
+//⑤ アイテムを削除する処理
+@PostMapping("/items/delete")
+@ResponseBody
+	public String deleteItem(@RequestParam("itemId") Long itemId) {
+    ShoppingItem item = shoppingItemRepository.findById(itemId).orElse(null);
+    if (item != null) {
+        shoppingItemRepository.delete(item); // データベースから削除
+        return "success";
+    }
+    return "error";
+  }
 }
