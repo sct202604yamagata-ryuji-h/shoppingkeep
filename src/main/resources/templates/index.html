@@ -22,6 +22,10 @@
         
         /* 税率選択ボックス */
         .tax-select { width: 65px; font-size: 0.85rem; padding: 4px; border-radius: 6px; }
+
+        /* ★削除ボタン（×）のスタイル */
+        .delete-item-btn { background: none; border: none; color: #dc3545; font-size: 1.2rem; font-weight: bold; padding: 0 6px; margin-left: 6px; cursor: pointer; line-height: 1; }
+        .delete-item-btn:hover { color: #bd2130; }
         
         .total-box { background-color: #f1f3f4; border-radius: 8px; padding: 12px; margin-top: 15px; font-size: 0.95rem; }
         .total-val { font-size: 1.3rem; }
@@ -60,27 +64,31 @@
 
                     <!-- アイテム一覧 -->
                     <div class="flex-grow-1 my-2">
-                        <div th:each="item : ${note.shoppingItems}" class="item-row">
+                        <!-- ★ JavaScriptで消しやすいように各行に id を付与 -->
+                        <div th:each="item : ${note.shoppingItems}" class="item-row" th:id="'item-row-' + ${item.id}">
                             <input type="checkbox" th:checked="${item.isInCart}" 
                                    th:id="'item-check-' + ${item.id}"
                                    th:onchange="'toggleCart(' + ${item.id} + ')'" class="form-check-input item-checkbox">
                             
                             <label th:text="${item.name}" th:for="'item-check-' + ${item.id}" class="item-label"></label>
                             
-                            <!-- ★金額と税率の入力エリア（チェックオンで active になる） -->
+                            <!-- 金額と税率の入力エリア -->
                             <div th:id="'input-area-' + ${item.id}" th:class="${item.isInCart} ? 'input-group-area active' : 'input-group-area'">
                                 <!-- 金額入力 -->
                                 <input type="number" th:value="${item.price}" 
                                        th:id="'item-price-' + ${item.id}" class="form-control form-control-sm price-input"
                                        placeholder="¥" inputmode="numeric" th:oninput="'updateItemData(' + ${item.id} + ')'">
                                 
-                                <!-- ★税率選択セレクトボックス -->
+                                <!-- 税率選択セレクトボックス -->
                                 <select th:id="'item-tax-' + ${item.id}" class="form-select form-select-sm tax-select" th:onchange="'updateItemData(' + ${item.id} + ')'">
                                     <option value="10" th:selected="${item.specificTaxRate == 10}">10%</option>
                                     <option value="8" th:selected="${item.specificTaxRate == 8}">8%</option>
-                                    <option value="0" th:selected="${item.specificTaxRate == 0}">無税</option>
+                                    <option value="0" th:selected="${item.specificTaxRate == 0}">免税</option>
                                 </select>
                             </div>
+
+                            <!-- ★ アイテムの削除ボタン（×）を追加 -->
+                            <button type="button" class="delete-item-btn" th:onclick="'deleteItem(' + ${item.id} + ')'" title="削除">×</button>
                         </div>
                         
                         <p th:if="${#lists.isEmpty(note.shoppingItems)}" class="text-muted text-center small my-4 text-no-items">（アイテムはありません）</p>
@@ -95,7 +103,7 @@
                         </div>
                     </form>
 
-                    <!-- リアルタイム合計金額表示エリア（内訳も表示） -->
+                    <!-- リアルタイム合計金額表示エリア -->
                     <div class="total-box">
                         <div class="d-flex justify-content-between"><span>税抜合計:</span> <span class="subtotal-val">¥0</span></div>
                         <div class="d-flex justify-content-between text-muted small"><span>内訳(10%対象):</span> <span class="subtotal-10-val">¥0</span></div>
@@ -117,7 +125,6 @@
         document.querySelectorAll('.note-card').forEach(card => { calculateCardTotal(card); });
     });
 
-    // チェックボックスの切り替え
     function toggleCart(itemId) {
         const checkbox = document.getElementById(`item-check-${itemId}`);
         const inputArea = document.getElementById(`input-area-${itemId}`);
@@ -131,13 +138,12 @@
         } else {
             inputArea.classList.remove('active');
             priceInput.value = '';
-            taxSelect.value = '10'; // チェックを外したら10%に戻す
+            taxSelect.value = '10';
         }
         calculateCardTotal(card);
         sendDataToServer(itemId, checkbox.checked, priceInput.value, taxSelect.value);
     }
 
-    // 金額や税率が変わった時の処理
     function updateItemData(itemId) {
         const checkbox = document.getElementById(`item-check-${itemId}`);
         const priceInput = document.getElementById(`item-price-${itemId}`);
@@ -148,7 +154,47 @@
         sendDataToServer(itemId, checkbox.checked, priceInput.value, taxSelect.value);
     }
 
-    // ★それぞれの税率ごとに集計して消費税を計算する賢いロジック
+    // ★ アイテムを画面とDBから削除するJavaScript関数を追加
+    function deleteItem(itemId) {
+        if (!confirm('このアイテムを削除してもよろしいですか？')) {
+            return; // キャンセルされたら何もしない
+        }
+
+        const itemRow = document.getElementById(`item-row-${itemId}`);
+        const card = itemRow.closest('.note-card');
+
+        // Java側の削除APIを呼び出す
+        const formData = new FormData();
+        formData.append('itemId', itemId);
+
+        fetch('/items/delete', { method: 'POST', body: formData })
+        .then(response => response.text())
+        .then(data => {
+            if (data === 'success') {
+                // 画面から該当の行を削除
+                itemRow.remove();
+                
+                // アイテムがゼロになったかチェックしてメッセージを出す
+                const remainingItems = card.querySelectorAll('.item-row');
+                if (remainingItems.length === 0) {
+                    // まだ「アイテムはありません」の文字がなければ追加する
+                    if (!card.querySelector('.text-no-items')) {
+                        const noItemText = document.createElement('p');
+                        noItemText.className = 'text-muted text-center small my-4 text-no-items';
+                        noItemText.innerText = '（アイテムはありません）';
+                        card.querySelector('.flex-grow-1').appendChild(noItemText);
+                    }
+                }
+                
+                // 金額をリアルタイム再計算
+                calculateCardTotal(card);
+            } else {
+                alert('削除に失敗しました。');
+            }
+        })
+        .catch(error => console.error('エラー:', error));
+    }
+
     function calculateCardTotal(card) {
         let subtotal10 = 0;
         let subtotal8 = 0;
@@ -173,18 +219,12 @@
             }
         });
 
-        // 税抜の総合計
         let subtotalTotal = subtotal10 + subtotal8 + subtotal0;
-        
-        // 各税率ごとの消費税（端数切り捨て）を計算して合算
         let tax10 = Math.floor(subtotal10 * 0.1);
         let tax8 = Math.floor(subtotal8 * 0.08);
         let taxTotal = tax10 + tax8;
-
-        // 税込合計
         let total = subtotalTotal + taxTotal;
 
-        // 画面の数値を書き換え
         card.querySelector('.subtotal-val').innerText = `¥${subtotalTotal.toLocaleString()}`;
         card.querySelector('.subtotal-10-val').innerText = `¥${subtotal10.toLocaleString()}`;
         card.querySelector('.subtotal-8-val').innerText = `¥${subtotal8.toLocaleString()}`;
@@ -192,13 +232,12 @@
         card.querySelector('.total-val').innerText = `¥${total.toLocaleString()}`;
     }
 
-    // Javaの特定の変数名（specificTaxRate）に合わせてデータを送信
     function sendDataToServer(itemId, isInCart, price, specificTaxRate) {
         const formData = new FormData();
         formData.append('itemId', itemId);
         formData.append('isInCart', isInCart);
         formData.append('price', price);
-        formData.append('specificTaxRate', specificTaxRate); // ★ Java側と統一
+        formData.append('specificTaxRate', specificTaxRate);
 
         fetch('/items/update', { method: 'POST', body: formData })
         .then(response => response.text())
