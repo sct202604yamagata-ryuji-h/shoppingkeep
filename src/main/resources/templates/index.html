@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>SmartShoppingKeep</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding-top: 30px; }
+        .note-card { background-color: #fffde7; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .item-row { display: flex; align-items: center; margin-bottom: 8px; }
+        .price-input { width: 80px; margin-left: auto; display: none; }
+        .price-input.active { display: block; }
+        .total-box { background-color: #f1f3f4; border-radius: 4px; padding: 8px; margin-top: 15px; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1 class="text-center mb-5">🛒 SmartShoppingKeep</h1>
+
+    <!-- 簡易入力エリア（新規カード追加） -->
+    <div class="row justify-content-center mb-5">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form th:action="@{/notes/add}" method="post">
+                        <div class="input-group">
+                            <input type="text" name="title" class="form-control" placeholder="メモのタイトルを入力...（例：イオンで買うもの）" required>
+                            <button class="btn btn-warning" type="submit">作成</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- メモ一覧表示エリア -->
+    <div class="row">
+        <div class="col-md-4 mb-4" th:each="note : ${notes}" th:id="'note-card-' + ${note.id}">
+            <div class="card note-card h-100">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title fw-bold" th:text="${note.title}">メモのタイトル</h5>
+                    <p class="text-muted small" th:text="${#temporals.format(note.createdAt, 'yyyy/MM/dd HH:mm')}">作成日時</p>
+                    <hr>
+
+                    <!-- アイテム一覧 -->
+                    <div class="flex-grow-1">
+                        <div th:each="item : ${note.shoppingItems}" class="item-row">
+                            <!-- カゴ入れチェックボックス -->
+                            <input type="checkbox" th:checked="${item.isInCart}" 
+                                   th:id="'item-check-' + ${item.id}"
+                                   th:onchange="'toggleCart(' + ${item.id} + ')'" class="form-check-input me-2 item-checkbox">
+                            
+                            <label th:text="${item.name}" th:for="'item-check-' + ${item.id}" class="form-check-label"></label>
+                            
+                            <!-- 金額入力欄（チェックが入ると active クラスが付与されて表示される） -->
+                            <input type="number" th:value="${item.price}" 
+                                   th:id="'item-price-' + ${item.id}"
+                                   th:class="${item.isInCart} ? 'form-control form-control-sm price-input active' : 'form-control form-control-sm price-input'"
+                                   placeholder="¥" th:oninput="'updatePrice(' + ${item.id} + ')'">
+                        </div>
+                        
+                        <p th:if="${#lists.isEmpty(note.shoppingItems)}" class="text-muted text-center small my-3 text-no-items">（アイテムはありません）</p>
+                    </div>
+
+                    <!-- 各カード内専用のアイテム追加フォーム -->
+                    <form th:action="@{/items/add}" method="post" class="mt-3">
+                        <input type="hidden" name="noteId" th:value="${note.id}">
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="itemName" class="form-control" placeholder="買うものを追加..." required>
+                            <button class="btn btn-outline-secondary" type="submit">＋</button>
+                        </div>
+                    </form>
+
+                    <!-- リアルタイム合計金額表示エリア -->
+                    <div class="total-box">
+                        <div>税抜合計: <span class="subtotal-val">¥0</span></div>
+                        <div>消費税(10%): <span class="tax-val">¥0</span></div>
+                        <div class="fw-bold text-danger mt-1">税込合計: <span class="total-val">¥0</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- リアルタイム計算 ＆ 非同期通信のJavaScript -->
+<script th:inline="javascript">
+    // ページ読み込み時に、すでにチェックが入っているカードの金額を計算する
+    document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll('.note-card').forEach(card => {
+            calculateCardTotal(card);
+        });
+    });
+
+    // チェックボックスを切り替えた時の処理
+    function toggleCart(itemId) {
+        const checkbox = document.getElementById(`item-check-${itemId}`);
+        const priceInput = document.getElementById(`item-price-${itemId}`);
+        const card = checkbox.closest('.note-card');
+
+        if (checkbox.checked) {
+            priceInput.classList.add('active');
+            priceInput.focus();
+        } else {
+            priceInput.classList.remove('active');
+            priceInput.value = ''; // チェック外したら金額をクリア
+        }
+
+        calculateCardTotal(card);
+        sendDataToServer(itemId, checkbox.checked, priceInput.value);
+    }
+
+    // 金額を入力した時の処理
+    function updatePrice(itemId) {
+        const checkbox = document.getElementById(`item-check-${itemId}`);
+        const priceInput = document.getElementById(`item-price-${itemId}`);
+        const card = priceInput.closest('.note-card');
+
+        calculateCardTotal(card);
+        sendDataToServer(itemId, checkbox.checked, priceInput.value);
+    }
+
+    // カードごとの合計金額を計算するロジック
+    function calculateCardTotal(card) {
+        let subtotal = 0;
+
+        // チェックが入っているアイテムの金額をループで足し算
+        card.querySelectorAll('.item-row').forEach(row => {
+            const checkbox = row.querySelector('.item-checkbox');
+            const priceInput = row.querySelector('.price-input');
+
+            if (checkbox && checkbox.checked) {
+                const price = parseInt(priceInput.value) || 0;
+                subtotal += price;
+            }
+        });
+
+        // 税金（10%切り捨て）と税込合計の計算
+        let tax = Math.floor(subtotal * 0.1);
+        let total = subtotal + tax;
+
+        // 画面の数値を書き換え
+        card.querySelector('.subtotal-val').innerText = `¥${subtotal.toLocaleString()}`;
+        card.querySelector('.tax-val').innerText = `¥${tax.toLocaleString()}`;
+        card.querySelector('.total-val').innerText = `¥${total.toLocaleString()}`;
+    }
+
+    // 画面をリロードせずにJava（サーバー）へデータを保存する（Ajax通信）
+    function sendDataToServer(itemId, isInCart, price) {
+        const formData = new FormData();
+        formData.append('itemId', itemId);
+        formData.append('isInCart', isInCart);
+        formData.append('price', price);
+
+        fetch('/items/update', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.text())
+        .then(data => {
+            console.log('保存ステータス:', data);
+        })
+        .catch(error => console.error('通信エラー:', error));
+    }
+</script>
+</body>
+</html>
