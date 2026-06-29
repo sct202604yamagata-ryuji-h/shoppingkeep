@@ -51,21 +51,24 @@ public class NoteController {
         return "redirect:/";
     }
 
-    // ④ ★カゴ入れ状態と金額を非同期（裏側）で更新する処理
-    @PostMapping("/items/update")
-    @ResponseBody // 画面遷移せず、データだけをやり取りする
-    public String updateItem(
-            @RequestParam("itemId") Long itemId,
-            @RequestParam("isInCart") Boolean isInCart,
-            @RequestParam(value = "price", required = false) Integer price) {
-        
-        ShoppingItem item = shoppingItemRepository.findById(itemId).orElse(null);
-        if (item != null) {
-            item.setIsInCart(isInCart);
-            item.setPrice(price);
-            shoppingItemRepository.save(item);
-            return "success";
-        }
-        return "error";
+
+//④ カゴ入れ状態、金額、そして【税率】を非同期（裏側）で更新する処理
+@PostMapping("/items/update")
+@ResponseBody
+public String updateItem(
+        @RequestParam("itemId") Long itemId,
+        @RequestParam("isInCart") Boolean isInCart,
+        @RequestParam(value = "price", required = false) Integer price,
+        @RequestParam(value = "specificTaxRate", defaultValue = "10") Integer specificTaxRate) { // ★引数にspecificTaxRateを追加
+    
+    ShoppingItem item = shoppingItemRepository.findById(itemId).orElse(null);
+    if (item != null) {
+        item.setIsInCart(isInCart);
+        item.setPrice(price);
+        item.setSpecificTaxRate(specificTaxRate); // ★税率をセット
+        shoppingItemRepository.save(item);
+        return "success";
     }
+    return "error";
+	}
 }

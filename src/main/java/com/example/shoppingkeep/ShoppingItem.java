@@ -22,21 +22,29 @@ public class ShoppingItem {
     private Integer price;
     @Column(name = "is_tax_included")
     private Boolean isTaxIncluded = false;
+
+    // ★ 初期値として = 10; を追加しました
     @Column(name = "specific_tax_rate")
-    private Integer specificTaxRate;
+    private Integer specificTaxRate = 10; 
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+    
     public Note getNote() { return note; }
     public void setNote(Note note) { this.note = note; }
+    
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+    
     public Boolean getIsInCart() { return isInCart; }
     public void setIsInCart(Boolean isInCart) { this.isInCart = isInCart; }
+    
     public Integer getPrice() { return price; }
     public void setPrice(Integer price) { this.price = price; }
+    
     public Boolean getIsTaxIncluded() { return isTaxIncluded; }
     public void setIsTaxIncluded(Boolean isTaxIncluded) { this.isTaxIncluded = isTaxIncluded; }
+    
     public Integer getSpecificTaxRate() { return specificTaxRate; }
     public void setSpecificTaxRate(Integer specificTaxRate) { this.specificTaxRate = specificTaxRate; }
 }
