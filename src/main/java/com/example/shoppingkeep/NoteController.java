@@ -75,11 +75,22 @@ public class NoteController {
 @PostMapping("/items/delete")
 @ResponseBody
 	public String deleteItem(@RequestParam("itemId") Long itemId) {
-    ShoppingItem item = shoppingItemRepository.findById(itemId).orElse(null);
-    if (item != null) {
-        shoppingItemRepository.delete(item); // データベースから削除
-        return "success";
-    }
-    return "error";
-  }
+    		ShoppingItem item = shoppingItemRepository.findById(itemId).orElse(null);
+    		if (item != null) {
+    			shoppingItemRepository.delete(item); // データベースから削除
+    			return "success";
+    		}
+    		return "error";
+	}
+//⑥ 買い物メモ（カード）自体を削除する処理
+@PostMapping("/notes/delete")
+@ResponseBody
+	public String deleteNote(@RequestParam("noteId") Long noteId) {
+    		Note note = noteRepository.findById(noteId).orElse(null);
+    		if (note != null) {
+    			noteRepository.delete(note); // データベースからメモを丸ごと削除
+    			return "success";
+    		}
+    		return "error";
+	}
 }
