@@ -28,6 +28,12 @@
         .total-box { background-color: #f1f3f4; border-radius: 8px; padding: 12px; margin-top: 15px; font-size: 0.95rem; }
         .total-val { font-size: 1.3rem; }
     </style>
+	<link rel="manifest" th:href="@{/manifest.json}">
+	<script>
+	  if ('serviceWorker' in navigator) {
+	    navigator.serviceWorker.register('/service-worker.js');
+	  }
+	</script>
 </head>
 <body>
 <div class="container-fluid">
